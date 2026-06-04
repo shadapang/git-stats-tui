@@ -26,7 +26,7 @@ class GitStatsApp(App):
     """A beautiful TUI for local git statistics."""
 
     TITLE = "git-stats-tui"
-    SUB_TITLE = "Local Git Statistics Dashboard"
+    SUB_TITLE = "Git \u7edf\u8ba1\u4eea\u8868\u76d8"
 
     CSS = """
     Screen {
@@ -92,11 +92,11 @@ class GitStatsApp(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit", show=True),
-        Binding("r", "refresh", "Refresh", show=True),
-        Binding("f", "find_repos", "Find Repos", show=True),
-        Binding("d", "toggle_date_filter", "Date Filter", show=True),
-        Binding("s", "toggle_repo_switch", "Switch Repo", show=True),
+        Binding("q", "quit", "\u9000\u51fa", show=True),
+        Binding("r", "refresh", "\u5237\u65b0", show=True),
+        Binding("f", "find_repos", "\u627e\u4ed3\u5e93", show=True),
+        Binding("d", "toggle_date_filter", "\u65e5\u671f\u7b5b\u9009", show=True),
+        Binding("s", "toggle_repo_switch", "\u5207\u4ed3\u5e93", show=True),
     ]
 
     def __init__(self, repo_path: Path | None = None, **kwargs):
@@ -111,27 +111,27 @@ class GitStatsApp(App):
         with Vertical(id="main-content"):
             # Date filter bar (hidden by default)
             with Horizontal(id="date-filter-bar"):
-                yield Static("Date range (YYYY-MM-DD ~ YYYY-MM-DD): ", classes="filter-label")
-                yield Input(placeholder="e.g. 2025-01-01 ~ 2025-12-31", id="date-input")
+                yield Static("\u65e5\u671f\u8303\u56f4 (YYYY-MM-DD ~ YYYY-MM-DD): ", classes="filter-label")
+                yield Input(placeholder="\u5982 2025-01-01 ~ 2025-12-31", id="date-input")
             # Repo switch bar (hidden by default)
             with Horizontal(id="repo-switch-bar"):
-                yield Static("Repo path: ", classes="filter-label")
-                yield Input(placeholder="path/to/repo or #N for discovered repo", id="repo-input")
+                yield Static("\u4ed3\u5e93\u8def\u5f84: ", classes="filter-label")
+                yield Input(placeholder="\u8def\u5f84/\u5230/\u4ed3\u5e93 \u6216 #N \u9009\u5df2\u53d1\u73b0\u4ed3\u5e93", id="repo-input")
             yield Static(id="repo-info")
             with TabbedContent():
-                with TabPane("Heatmap", id="tab-heatmap"):
+                with TabPane("\u70ed\u529b\u56fe", id="tab-heatmap"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="heatmap-content")
-                with TabPane("Languages", id="tab-languages"):
+                with TabPane("\u8bed\u8a00\u5206\u5e03", id="tab-languages"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="lang-content")
-                with TabPane("Timeline", id="tab-timeline"):
+                with TabPane("\u65f6\u95f4\u7ebf", id="tab-timeline"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="timeline-content")
-                with TabPane("Commits", id="tab-commits"):
+                with TabPane("\u63d0\u4ea4\u8bb0\u5f55", id="tab-commits"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="commits-content")
-                with TabPane("Overview", id="tab-overview"):
+                with TabPane("\u6982\u89c8", id="tab-overview"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="overview-content")
         yield Footer()
@@ -154,7 +154,7 @@ class GitStatsApp(App):
         if not value:
             self._date_filter = None
             self._load_stats()
-            self.notify("Date filter cleared")
+            self.notify("\u65e5\u671f\u7b5b\u9009\u5df2\u6e05\u9664")
             return
 
         try:
@@ -166,11 +166,11 @@ class GitStatsApp(App):
                 end = date.fromisoformat(parts[1])
                 self._date_filter = (start, end)
                 self._load_stats()
-                self.notify(f"Filtered: {start} ~ {end}")
+                self.notify(f"\u5df2\u7b5b\u9009: {start} ~ {end}")
             else:
-                self.notify("Format: YYYY-MM-DD ~ YYYY-MM-DD", severity="error")
+                self.notify("\u683c\u5f0f: YYYY-MM-DD ~ YYYY-MM-DD", severity="error")
         except (ValueError, IndexError):
-            self.notify("Invalid date format", severity="error")
+            self.notify("\u65e5\u671f\u683c\u5f0f\u65e0\u6548", severity="error")
 
     def _apply_repo_switch(self, value: str) -> None:
         """Switch to a different repo."""
@@ -185,10 +185,10 @@ class GitStatsApp(App):
                 self.repo_path = self._discovered_repos[idx]
                 self._date_filter = None
                 self._load_stats()
-                self.notify(f"Switched to: {self.repo_path.name}")
+                self.notify(f"\u5df2\u5207\u6362\u5230: {self.repo_path.name}")
                 return
             else:
-                self.notify(f"Invalid repo index (1-{len(self._discovered_repos)})", severity="error")
+                self.notify(f"\u65e0\u6548\u4ed3\u5e93\u5e8f\u53f7 (1-{len(self._discovered_repos)})", severity="error")
                 return
 
         # Try as a path
@@ -197,9 +197,9 @@ class GitStatsApp(App):
             self.repo_path = new_path
             self._date_filter = None
             self._load_stats()
-            self.notify(f"Switched to: {self.repo_path.name}")
+            self.notify(f"\u5df2\u5207\u6362\u5230: {self.repo_path.name}")
         else:
-            self.notify(f"Not a git repo: {new_path}", severity="error")
+            self.notify(f"\u4e0d\u662f git \u4ed3\u5e93: {new_path}", severity="error")
 
     def _load_stats(self) -> None:
         """Load git stats and render all widgets."""
@@ -207,7 +207,7 @@ class GitStatsApp(App):
             self.stats = compute_stats(self.repo_path)
         except Exception as e:
             self.query_one("#repo-info", Static).update(
-                f"[red]Error loading repo: {e}[/]"
+                f"[red]\u52a0\u8f7d\u4ed3\u5e93\u51fa\u9519: {e}[/]"
             )
             return
 
@@ -253,20 +253,20 @@ class GitStatsApp(App):
         s = self.stats
         info = Text()
         info.append(f"  {s.repo_name}  ", style="bold magenta")
-        info.append(f"on ", style="dim")
+        info.append(f"\u5206\u652f ", style="dim")
         info.append(f"{s.current_branch}", style="cyan")
         info.append(f"  |  ", style="dim")
         info.append(f"{s.total_commits}", style="bold green")
-        info.append(f" commits  ", style="dim")
+        info.append(f" \u6b21\u63d0\u4ea4  ", style="dim")
         info.append(f"{s.total_authors}", style="bold yellow")
-        info.append(f" authors  ", style="dim")
+        info.append(f" \u4f4d\u4f5c\u8005  ", style="dim")
         info.append(f"{s.total_branches}", style="bold blue")
-        info.append(f" branches", style="dim")
+        info.append(f" \u4e2a\u5206\u652f", style="dim")
         if s.first_commit_date and s.last_commit_date:
             days = (s.last_commit_date - s.first_commit_date).days
             info.append(f"  |  ", style="dim")
             info.append(f"{days}", style="bold")
-            info.append(f" days active", style="dim")
+            info.append(f" \u5929\u6d3b\u8dc3", style="dim")
         self.query_one("#repo-info", Static).update(info)
 
     def _render_heatmap(self) -> None:
@@ -302,71 +302,71 @@ class GitStatsApp(App):
         s = self.stats
 
         table = Table(
-            title=f"Overview - {s.repo_name}",
+            title=f"\u6982\u89c8 - {s.repo_name}",
             show_header=False,
             border_style="dim",
             title_style="bold magenta",
         )
-        table.add_column("Metric", style="cyan", min_width=20)
-        table.add_column("Value", style="bold", min_width=20)
+        table.add_column("\u6307\u6807", style="cyan", min_width=20)
+        table.add_column("\u6570\u503c", style="bold", min_width=20)
 
-        table.add_row("Total Commits", f"{s.total_commits:,}")
-        table.add_row("Total Authors", f"{s.total_authors:,}")
-        table.add_row("Current Branch", s.current_branch)
-        table.add_row("Total Branches", str(s.total_branches))
+        table.add_row("\u603b\u63d0\u4ea4\u6570", f"{s.total_commits:,}")
+        table.add_row("\u603b\u4f5c\u8005\u6570", f"{s.total_authors:,}")
+        table.add_row("\u5f53\u524d\u5206\u652f", s.current_branch)
+        table.add_row("\u603b\u5206\u652f\u6570", str(s.total_branches))
 
         if s.first_commit_date and s.last_commit_date:
-            table.add_row("First Commit", str(s.first_commit_date))
-            table.add_row("Latest Commit", str(s.last_commit_date))
+            table.add_row("\u9996\u6b21\u63d0\u4ea4", str(s.first_commit_date))
+            table.add_row("\u6700\u65b0\u63d0\u4ea4", str(s.last_commit_date))
             days = (s.last_commit_date - s.first_commit_date).days
-            table.add_row("Active Days", f"{days:,}")
+            table.add_row("\u6d3b\u8dc3\u5929\u6570", f"{days:,}")
             if days > 0:
-                table.add_row("Avg Commits/Day", f"{s.total_commits / days:.1f}")
+                table.add_row("\u65e5\u5747\u63d0\u4ea4", f"{s.total_commits / days:.1f}")
 
         # Top language
         if s.language_counts:
             top_lang, top_count = s.language_counts.most_common(1)[0]
-            table.add_row("Top Language", f"{top_lang} ({top_count} files)")
+            table.add_row("\u4e3b\u529b\u8bed\u8a00", f"{top_lang} ({top_count} \u4e2a\u6587\u4ef6)")
 
         # Top author
         if s.author_counts:
             top_author, top_commits = s.author_counts.most_common(1)[0]
-            table.add_row("Top Author", f"{top_author} ({top_commits} commits)")
+            table.add_row("\u6700\u6d3b\u8dc3\u4f5c\u8005", f"{top_author} ({top_commits} \u6b21\u63d0\u4ea4)")
 
         # Peak hour
         if s.hour_counts:
             peak_hour = s.hour_counts.most_common(1)[0][0]
-            table.add_row("Peak Commit Hour", f"{peak_hour:02d}:00")
+            table.add_row("\u63d0\u4ea4\u9ad8\u5cf0\u65f6\u6bb5", f"{peak_hour:02d}:00")
 
         # Weekend vs weekday
         if s.weekday_counts:
             weekday_total = sum(s.weekday_counts.get(d, 0) for d in range(5))
             weekend_total = sum(s.weekday_counts.get(d, 0) for d in range(5, 7))
-            table.add_row("Weekday Commits", f"{weekday_total:,}")
-            table.add_row("Weekend Commits", f"{weekend_total:,}")
+            table.add_row("\u5de5\u4f5c\u65e5\u63d0\u4ea4", f"{weekday_total:,}")
+            table.add_row("\u5468\u672b\u63d0\u4ea4", f"{weekend_total:,}")
             if weekday_total > 0:
                 ratio = weekend_total / weekday_total
-                table.add_row("Weekend/Weekday Ratio", f"{ratio:.2f}")
+                table.add_row("\u5468\u672b/\u5de5\u4f5c\u65e5\u6bd4", f"{ratio:.2f}")
 
         self.query_one("#overview-content", Static).update(table)
 
     def _render_commits(self) -> None:
         """Render the recent commits list."""
         if not self.stats or not self.stats.commits:
-            self.query_one("#commits-content", Static).update("[dim]No commits found[/]")
+            self.query_one("#commits-content", Static).update("[dim]\u6682\u65e0\u63d0\u4ea4\u8bb0\u5f55[/]")
             return
 
         table = Table(
-            title=f"Recent Commits  ({self.stats.total_commits} total)",
+            title=f"\u63d0\u4ea4\u8bb0\u5f55  (\u5171 {self.stats.total_commits} \u6b21)",
             show_header=True,
             border_style="dim",
             title_style="bold magenta",
         )
         table.add_column("#", style="dim", width=5)
-        table.add_column("Date", style="cyan", width=20)
-        table.add_column("Author", style="yellow", min_width=14)
-        table.add_column("Message", min_width=40)
-        table.add_column("Files", justify="right", width=5)
+        table.add_column("\u65e5\u671f", style="cyan", width=20)
+        table.add_column("\u4f5c\u8005", style="yellow", min_width=14)
+        table.add_column("\u63d0\u4ea4\u4fe1\u606f", min_width=40)
+        table.add_column("\u6587\u4ef6", justify="right", width=5)
         table.add_column("+/-", width=10)
 
         for i, c in enumerate(self.stats.commits[:100], 1):
@@ -383,28 +383,28 @@ class GitStatsApp(App):
             )
 
         if self.stats.total_commits > 100:
-            table.add_row("", "", "", f"... and {self.stats.total_commits - 100} more", "", "")
+            table.add_row("", "", "", f"... \u8fd8\u6709 {self.stats.total_commits - 100} \u6b21\u63d0\u4ea4", "", "")
 
         self.query_one("#commits-content", Static).update(table)
 
     def action_refresh(self) -> None:
         """Refresh stats."""
         self._load_stats()
-        self.notify("Stats refreshed!")
+        self.notify("\u5df2\u5237\u65b0!")
 
     def action_find_repos(self) -> None:
         """Find git repos under current directory."""
         repos = find_git_repos(self.repo_path.parent)
         if not repos:
-            self.notify("No git repos found", severity="warning")
+            self.notify("\u672a\u627e\u5230 git \u4ed3\u5e93", severity="warning")
             return
         self._discovered_repos = repos
         # Show repo list as notification
-        lines = [f"Found {len(repos)} repos. Press [bold]s[/] then [bold]#N[/] to switch:"]
+        lines = [f"\u627e\u5230 {len(repos)} \u4e2a\u4ed3\u5e93\u3002\u6309 [bold]s[/] \u7136\u540e [bold]#N[/] \u5207\u6362:"]
         for i, r in enumerate(repos[:10], 1):
             lines.append(f"  #{i} {r.name}")
         if len(repos) > 10:
-            lines.append(f"  ... and {len(repos) - 10} more")
+            lines.append(f"  ... \u8fd8\u6709 {len(repos) - 10} \u4e2a")
         self.notify("\n".join(lines))
 
     def action_toggle_date_filter(self) -> None:
@@ -424,7 +424,7 @@ class GitStatsApp(App):
                 self._discovered_repos = find_git_repos(self.repo_path.parent, max_depth=2)
             self.query_one("#repo-input", Input).focus()
             if self._discovered_repos:
-                hint = "Discovered: " + ", ".join(
+                hint = "\u5df2\u53d1\u73b0: " + ", ".join(
                     f"#{i+1}={r.name}" for i, r in enumerate(self._discovered_repos[:5])
                 )
                 self.notify(hint)
@@ -436,40 +436,40 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog="git-stats",
-        description="Beautiful terminal UI for local git statistics",
+        description="Git \u7edf\u8ba1\u53ef\u89c6\u5316\u5de5\u5177 - \u7ec8\u7aef\u754c\u9762",
     )
     parser.add_argument(
         "path",
         nargs="?",
         default=".",
-        help="Path to git repository (default: current directory)",
+        help="\u4ed3\u5e93\u8def\u5f84 (\u9ed8\u8ba4: \u5f53\u524d\u76ee\u5f55)",
     )
     parser.add_argument(
         "--find",
         action="store_true",
-        help="Find all git repos under the given path",
+        help="\u67e5\u627e\u76ee\u5f55\u4e0b\u6240\u6709 git \u4ed3\u5e93",
     )
     args = parser.parse_args()
 
     repo_path = Path(args.path).resolve()
 
     if not repo_path.exists():
-        print(f"Error: path does not exist: {repo_path}", file=sys.stderr)
+        print(f"\u9519\u8bef: \u8def\u5f84\u4e0d\u5b58\u5728: {repo_path}", file=sys.stderr)
         sys.exit(1)
 
     if args.find:
         repos = find_git_repos(repo_path)
         if not repos:
-            print(f"No git repos found under {repo_path}")
+            print(f"\u672a\u627e\u5230 git \u4ed3\u5e93: {repo_path}")
             sys.exit(0)
-        print(f"Found {len(repos)} git repos:")
+        print(f"\u627e\u5230 {len(repos)} \u4e2a git \u4ed3\u5e93:")
         for r in repos:
             print(f"  {r}")
         sys.exit(0)
 
     if not (repo_path / ".git").exists():
-        print(f"Error: not a git repository: {repo_path}", file=sys.stderr)
-        print("Tip: use --find to discover git repos under a directory", file=sys.stderr)
+        print(f"\u9519\u8bef: \u4e0d\u662f git \u4ed3\u5e93: {repo_path}", file=sys.stderr)
+        print("\u63d0\u793a: \u7528 --find \u67e5\u627e\u76ee\u5f55\u4e0b\u7684 git \u4ed3\u5e93", file=sys.stderr)
         sys.exit(1)
 
     app = GitStatsApp(repo_path=repo_path)
