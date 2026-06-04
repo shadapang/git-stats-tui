@@ -84,6 +84,11 @@ class GitStatsApp(App):
     #repo-input {
         width: 60;
     }
+
+    .filter-label {
+        color: $text-primary;
+        text-style: bold;
+    }
     """
 
     BINDINGS = [
@@ -106,11 +111,11 @@ class GitStatsApp(App):
         with Vertical(id="main-content"):
             # Date filter bar (hidden by default)
             with Horizontal(id="date-filter-bar"):
-                yield Static("Date range (YYYY-MM-DD ~ YYYY-MM-DD): ", style="bold cyan")
+                yield Static("Date range (YYYY-MM-DD ~ YYYY-MM-DD): ", classes="filter-label")
                 yield Input(placeholder="e.g. 2025-01-01 ~ 2025-12-31", id="date-input")
             # Repo switch bar (hidden by default)
             with Horizontal(id="repo-switch-bar"):
-                yield Static("Repo path: ", style="bold cyan")
+                yield Static("Repo path: ", classes="filter-label")
                 yield Input(placeholder="path/to/repo or #N for discovered repo", id="repo-input")
             yield Static(id="repo-info")
             with TabbedContent():
