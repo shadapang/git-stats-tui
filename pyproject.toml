@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "git-stats-tui"
+version = "0.1.0"
+description = "Beautiful terminal UI for local git statistics - contribution heatmap, language breakdown, commit patterns"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Dev Engineer" }]
+keywords = ["git", "statistics", "tui", "terminal", "contribution", "heatmap"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = [
+    "textual>=3.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+git-stats = "src.app:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
