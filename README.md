@@ -42,7 +42,7 @@ git-stats --find ~/projects
 
 ## Screenshots
 
-> Coming soon — run it and take your own!
+![git-stats-tui Preview](docs/preview.svg)
 
 ## Key Bindings
 
