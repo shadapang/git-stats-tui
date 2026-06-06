@@ -23,7 +23,7 @@ MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 DAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""]
 
 
-def _level(count: int, thresholds: tuple[int, int, int] = (1, 3, 6, 10)) -> int:
+def _level(count: int, thresholds: tuple[int, int, int, int] = (2, 4, 7, 10)) -> int:
     """Convert commit count to color level 0-4."""
     if count == 0:
         return 0

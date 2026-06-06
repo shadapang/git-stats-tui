@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "textual>=3.0",
-    "rich>=13.0",
+    "rich>=13.0,<15",
 ]
 
 [project.scripts]
