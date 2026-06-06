@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from src.git_reader import (
-    CommitInfo,
     GitStats,
     GitCommandError,
     LANG_MAP,
@@ -20,7 +17,6 @@ from src.git_reader import (
     filter_by_date,
     find_git_repos,
     read_commits,
-    read_language_breakdown,
 )
 
 
