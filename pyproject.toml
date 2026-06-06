@@ -28,7 +28,7 @@ git-stats = "src.app:main"
 git-stats-gui = "src.gui_launcher:main_gui"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest>=7.0", "pytest-cov", "ruff>=0.1"]
 
 [tool.setuptools.packages.find]
 include = ["src*"]

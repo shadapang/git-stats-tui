@@ -81,8 +81,25 @@ def find_git_repos(path: Path, max_depth: int = 3) -> list[Path]:
     return sorted(repos)
 
 
-def _run_git(repo_path: Path, *args: str) -> str:
-    """Run a git command and return stdout."""
+class GitCommandError(RuntimeError):
+    """Raised when a git subprocess returns a non-zero exit code."""
+
+    def __init__(self, repo_path: Path, args: tuple[str, ...], returncode: int, stderr: str) -> None:
+        cmd = "git " + " ".join(args)
+        super().__init__(f"git command failed (exit {returncode}): {cmd}\n  repo: {repo_path}\n  stderr: {stderr[:200]}")
+        self.repo_path = repo_path
+        self.args_tuple = args
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def _run_git(repo_path: Path, *args: str, check: bool = True) -> str:
+    """Run a git command and return stdout.
+
+    Args:
+        check: If True (default), raise GitCommandError on non-zero returncode.
+               Set to False for commands where failure is expected (e.g. probing).
+    """
     result = subprocess.run(
         ["git", *args],
         cwd=repo_path,
@@ -91,6 +108,8 @@ def _run_git(repo_path: Path, *args: str) -> str:
         encoding="utf-8",
         errors="replace",
     )
+    if check and result.returncode != 0:
+        raise GitCommandError(repo_path, args, result.returncode, result.stderr)
     return result.stdout.strip()
 
 
@@ -103,6 +122,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
         "log", f"--max-count={max_commits}",
         "--format=" + fmt,
         "--numstat",
+        check=False,
     )
     if not output:
         return []
@@ -128,11 +148,14 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
             i += 1
             continue
 
-        # Read numstat lines until empty line
+        # Read numstat lines until empty line or next commit header
         files_changed = 0
         insertions = 0
         deletions = 0
         i += 1
+        # Skip blank line between header and numstat (git adds one)
+        if i < len(lines) and not lines[i].strip():
+            i += 1
         while i < len(lines) and lines[i].strip() and not lines[i].startswith("\0"):
             stat_parts = lines[i].split("\t")
             if len(stat_parts) >= 3:
@@ -164,26 +187,126 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
     return commits
 
 
-def read_language_breakdown(repo_path: Path) -> Counter:
-    """Read language breakdown using git ls-files + file extension counting."""
+def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
+    """Read language breakdown using git ls-files + wc -l for line counts.
+
+    Falls back to file-count mode if wc -l is unavailable.
+    """
     output = _run_git(repo_path, "ls-files")
     if not output:
         return Counter()
 
+    files = [
+        f.strip().strip('"').strip("'")
+        for f in output.split("\n")
+        if f.strip().strip('"').strip("'")
+    ]
+    if not files:
+        return Counter()
+
+    # Try wc -l for accurate line counts
     lang_counter: Counter = Counter()
-    for filepath in output.split("\n"):
-        filepath = filepath.strip().strip('"').strip("'")
-        if not filepath:
-            continue
+    try:
+        # Build file list, grouped by extension for batch processing
+        file_list = "\n".join(files[:max_files])
+        wc_output = subprocess.run(
+            ["xargs", "-d", "\n", "wc", "-l"],
+            cwd=repo_path,
+            input=file_list,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if wc_output.returncode == 0 and wc_output.stdout.strip():
+            # Parse wc -l output: "  123 path/to/file.py"
+            lang_lines: dict[str, int] = {}
+            for line in wc_output.stdout.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) < 2:
+                    continue
+                try:
+                    count = int(parts[0])
+                except ValueError:
+                    continue
+                filepath = parts[1]
+                ext = Path(filepath).suffix.lower()
+                lang = LANG_MAP.get(ext)
+                if lang:
+                    lang_lines[lang] = lang_lines.get(lang, 0) + count
+                elif ext and not ext.startswith(".") and len(ext) <= 6:
+                    key = f"Other({ext})"
+                    lang_lines[key] = lang_lines.get(key, 0) + count
+            return Counter(lang_lines)
+    except (FileNotFoundError, OSError):
+        pass  # wc not available, fall through to file-count mode
+
+    # Fallback: file-count mode
+    for filepath in files:
         ext = Path(filepath).suffix.lower()
         lang = LANG_MAP.get(ext)
         if lang:
             lang_counter[lang] += 1
         elif ext and not ext.startswith(".") and len(ext) <= 6:
-            # Only count reasonable extensions (skip .gitignore etc.)
             lang_counter[f"Other({ext})"] += 1
 
     return lang_counter
+
+
+def _compute_derived_stats(
+    commits: list[CommitInfo],
+    stats: GitStats,
+) -> None:
+    """Fill daily/hour/weekday/author counters and date range from commits.
+
+    Mutates ``stats`` in place. Shared by ``compute_stats()`` and date-filter
+    recompute in ``GitStatsApp._load_stats()``.
+    """
+    # Daily contribution counts
+    daily: dict[date, int] = defaultdict(int)
+    for c in commits:
+        daily[c.date.date()] += 1
+    stats.daily_counts = dict(daily)
+
+    # Hour / weekday / author distributions
+    for c in commits:
+        stats.hour_counts[c.date.hour] += 1
+        stats.weekday_counts[c.date.weekday()] += 1
+        stats.author_counts[c.author] += 1
+    stats.total_authors = len(stats.author_counts)
+
+    # Date range (git log newest-first → last element is oldest)
+    if commits:
+        stats.first_commit_date = commits[-1].date.date()
+        stats.last_commit_date = commits[0].date.date()
+
+
+def filter_by_date(stats: GitStats, start: date, end: date) -> GitStats:
+    """Return a new GitStats with commits filtered to [start, end].
+
+    Pure function — does not mutate the input.  Derived counters
+    (daily/hour/weekday/author) are recomputed from the filtered commits.
+    ``language_counts`` and branch info are carried over unchanged.
+    """
+    filtered_commits = [
+        c for c in stats.commits
+        if start <= c.date.date() <= end
+    ]
+    new_stats = GitStats(
+        repo_path=stats.repo_path,
+        repo_name=stats.repo_name,
+        commits=filtered_commits,
+        total_commits=len(filtered_commits),
+        language_counts=stats.language_counts,  # not date-dependent
+        current_branch=stats.current_branch,
+        total_branches=stats.total_branches,
+    )
+    if filtered_commits:
+        _compute_derived_stats(filtered_commits, new_stats)
+    return new_stats
 
 
 def compute_stats(repo_path: Path, max_commits: int = 5000) -> GitStats:
@@ -193,7 +316,6 @@ def compute_stats(repo_path: Path, max_commits: int = 5000) -> GitStats:
         repo_name=repo_path.name,
     )
 
-    # Read commits
     commits = read_commits(repo_path, max_commits)
     stats.commits = commits
     stats.total_commits = len(commits)
@@ -201,29 +323,7 @@ def compute_stats(repo_path: Path, max_commits: int = 5000) -> GitStats:
     if not commits:
         return stats
 
-    # Daily contribution counts
-    daily: dict[date, int] = defaultdict(int)
-    for c in commits:
-        d = c.date.date()
-        daily[d] += 1
-    stats.daily_counts = dict(daily)
-
-    # Hour distribution
-    for c in commits:
-        stats.hour_counts[c.date.hour] += 1
-
-    # Weekday distribution
-    for c in commits:
-        stats.weekday_counts[c.date.weekday()] += 1
-
-    # Author breakdown
-    for c in commits:
-        stats.author_counts[c.author] += 1
-    stats.total_authors = len(stats.author_counts)
-
-    # Date range
-    stats.first_commit_date = commits[-1].date.date()  # oldest (log is newest-first)
-    stats.last_commit_date = commits[0].date.date()
+    _compute_derived_stats(commits, stats)
 
     # Language breakdown
     stats.language_counts = read_language_breakdown(repo_path)

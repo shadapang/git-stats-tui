@@ -6,6 +6,18 @@ import subprocess
 from pathlib import Path
 
 
+def _get_root():
+    """Get or create the single Tk root window (singleton pattern)."""
+    import tkinter as tk
+    try:
+        root = tk._default_root
+        if root is not None:
+            return root
+    except AttributeError:
+        pass
+    return tk.Tk()
+
+
 def check_and_install_deps():
     """Check if textual/rich are installed, offer to install if missing."""
     missing = []
@@ -20,7 +32,7 @@ def check_and_install_deps():
     # Try auto-install
     import tkinter as tk
     from tkinter import messagebox
-    root = tk.Tk()
+    root = _get_root()
     root.withdraw()
     msg = f"Missing dependencies: {', '.join(missing)}\n\nInstall now?"
     if messagebox.askyesno("git-stats-tui", msg):
@@ -32,10 +44,11 @@ def check_and_install_deps():
             )
             return True
         except Exception as e:
-            root2 = tk.Tk()
-            root2.withdraw()
+            # Use Toplevel for error dialog instead of creating a new Tk()
+            err_root = tk.Tk()
+            err_root.withdraw()
             messagebox.showerror("git-stats-tui", f"Install failed:\n{e}\n\nPlease run manually:\npip install {' '.join(missing)}")
-            root2.destroy()
+            err_root.destroy()
             return False
     else:
         root.destroy()
@@ -133,7 +146,9 @@ def launch_gui():
             app = GitStatsApp(repo_path=resolved)
             app.run()
         except Exception as e:
-            # If TUI fails, show error in a new window
+            # If TUI fails, show error — use a fresh Tk since main one was destroyed
+            import tkinter as tk
+            from tkinter import messagebox
             err_root = tk.Tk()
             err_root.withdraw()
             messagebox.showerror(

@@ -16,10 +16,12 @@ from rich.table import Table
 from rich.align import Align
 from rich.console import Group
 
-from src.git_reader import GitStats, compute_stats, find_git_repos
-from src.widgets.heatmap import HeatmapWidget
-from src.widgets.languages import LanguageWidget
-from src.widgets.timeline import TimelineWidget
+from src.git_reader import GitStats, compute_stats, find_git_repos, filter_by_date
+from src.widgets.heatmap import build_heatmap_text
+from src.widgets.languages import build_language_table
+from src.widgets.timeline import build_hour_chart, build_weekday_chart, build_author_table
+from src.widgets.overview import build_overview_table
+from src.widgets.commits import build_commits_table
 
 
 class GitStatsApp(App):
@@ -211,33 +213,10 @@ class GitStatsApp(App):
             )
             return
 
-        # Apply date filter if set
+        # Apply date filter if set (pure function — no mutation)
         if self._date_filter and self.stats:
             start, end = self._date_filter
-            self.stats.commits = [
-                c for c in self.stats.commits
-                if start <= c.date.date() <= end
-            ]
-            self.stats.total_commits = len(self.stats.commits)
-            # Recompute derived stats
-            from collections import Counter, defaultdict
-            daily: dict[date, int] = defaultdict(int)
-            hour_counts: Counter = Counter()
-            weekday_counts: Counter = Counter()
-            author_counts: Counter = Counter()
-            for c in self.stats.commits:
-                daily[c.date.date()] += 1
-                hour_counts[c.date.hour] += 1
-                weekday_counts[c.date.weekday()] += 1
-                author_counts[c.author] += 1
-            self.stats.daily_counts = dict(daily)
-            self.stats.hour_counts = hour_counts
-            self.stats.weekday_counts = weekday_counts
-            self.stats.author_counts = author_counts
-            self.stats.total_authors = len(author_counts)
-            if self.stats.commits:
-                self.stats.first_commit_date = self.stats.commits[-1].date.date()
-                self.stats.last_commit_date = self.stats.commits[0].date.date()
+            self.stats = filter_by_date(self.stats, start, end)
 
         self._render_repo_info()
         self._render_heatmap()
@@ -299,92 +278,14 @@ class GitStatsApp(App):
         """Render the overview tab with all key stats."""
         if not self.stats:
             return
-        s = self.stats
-
-        table = Table(
-            title=f"\u6982\u89c8 - {s.repo_name}",
-            show_header=False,
-            border_style="dim",
-            title_style="bold magenta",
-        )
-        table.add_column("\u6307\u6807", style="cyan", min_width=20)
-        table.add_column("\u6570\u503c", style="bold", min_width=20)
-
-        table.add_row("\u603b\u63d0\u4ea4\u6570", f"{s.total_commits:,}")
-        table.add_row("\u603b\u4f5c\u8005\u6570", f"{s.total_authors:,}")
-        table.add_row("\u5f53\u524d\u5206\u652f", s.current_branch)
-        table.add_row("\u603b\u5206\u652f\u6570", str(s.total_branches))
-
-        if s.first_commit_date and s.last_commit_date:
-            table.add_row("\u9996\u6b21\u63d0\u4ea4", str(s.first_commit_date))
-            table.add_row("\u6700\u65b0\u63d0\u4ea4", str(s.last_commit_date))
-            days = (s.last_commit_date - s.first_commit_date).days
-            table.add_row("\u6d3b\u8dc3\u5929\u6570", f"{days:,}")
-            if days > 0:
-                table.add_row("\u65e5\u5747\u63d0\u4ea4", f"{s.total_commits / days:.1f}")
-
-        # Top language
-        if s.language_counts:
-            top_lang, top_count = s.language_counts.most_common(1)[0]
-            table.add_row("\u4e3b\u529b\u8bed\u8a00", f"{top_lang} ({top_count} \u4e2a\u6587\u4ef6)")
-
-        # Top author
-        if s.author_counts:
-            top_author, top_commits = s.author_counts.most_common(1)[0]
-            table.add_row("\u6700\u6d3b\u8dc3\u4f5c\u8005", f"{top_author} ({top_commits} \u6b21\u63d0\u4ea4)")
-
-        # Peak hour
-        if s.hour_counts:
-            peak_hour = s.hour_counts.most_common(1)[0][0]
-            table.add_row("\u63d0\u4ea4\u9ad8\u5cf0\u65f6\u6bb5", f"{peak_hour:02d}:00")
-
-        # Weekend vs weekday
-        if s.weekday_counts:
-            weekday_total = sum(s.weekday_counts.get(d, 0) for d in range(5))
-            weekend_total = sum(s.weekday_counts.get(d, 0) for d in range(5, 7))
-            table.add_row("\u5de5\u4f5c\u65e5\u63d0\u4ea4", f"{weekday_total:,}")
-            table.add_row("\u5468\u672b\u63d0\u4ea4", f"{weekend_total:,}")
-            if weekday_total > 0:
-                ratio = weekend_total / weekday_total
-                table.add_row("\u5468\u672b/\u5de5\u4f5c\u65e5\u6bd4", f"{ratio:.2f}")
-
+        table = build_overview_table(self.stats)
         self.query_one("#overview-content", Static).update(table)
 
     def _render_commits(self) -> None:
         """Render the recent commits list."""
-        if not self.stats or not self.stats.commits:
-            self.query_one("#commits-content", Static).update("[dim]\u6682\u65e0\u63d0\u4ea4\u8bb0\u5f55[/]")
+        if not self.stats:
             return
-
-        table = Table(
-            title=f"\u63d0\u4ea4\u8bb0\u5f55  (\u5171 {self.stats.total_commits} \u6b21)",
-            show_header=True,
-            border_style="dim",
-            title_style="bold magenta",
-        )
-        table.add_column("#", style="dim", width=5)
-        table.add_column("\u65e5\u671f", style="cyan", width=20)
-        table.add_column("\u4f5c\u8005", style="yellow", min_width=14)
-        table.add_column("\u63d0\u4ea4\u4fe1\u606f", min_width=40)
-        table.add_column("\u6587\u4ef6", justify="right", width=5)
-        table.add_column("+/-", width=10)
-
-        for i, c in enumerate(self.stats.commits[:100], 1):
-            date_str = c.date.strftime("%Y-%m-%d %H:%M")
-            msg = c.message[:60] + ("..." if len(c.message) > 60 else "")
-            delta = f"[green]+{c.insertions}[/]/[red]-{c.deletions}[/]"
-            table.add_row(
-                str(i),
-                date_str,
-                c.author,
-                msg,
-                str(c.files_changed),
-                delta,
-            )
-
-        if self.stats.total_commits > 100:
-            table.add_row("", "", "", f"... \u8fd8\u6709 {self.stats.total_commits - 100} \u6b21\u63d0\u4ea4", "", "")
-
+        table = build_commits_table(self.stats)
         self.query_one("#commits-content", Static).update(table)
 
     def action_refresh(self) -> None:
@@ -449,6 +350,11 @@ def main():
         action="store_true",
         help="\u67e5\u627e\u76ee\u5f55\u4e0b\u6240\u6709 git \u4ed3\u5e93",
     )
+    parser.add_argument(
+        "--export",
+        choices=["json"],
+        help="\u5bfc\u51fa\u7edf\u8ba1\u6570\u636e\u4e3a JSON \u5e76\u8f93\u51fa\u5230 stdout",
+    )
     args = parser.parse_args()
 
     repo_path = Path(args.path).resolve()
@@ -471,6 +377,40 @@ def main():
         print(f"\u9519\u8bef: \u4e0d\u662f git \u4ed3\u5e93: {repo_path}", file=sys.stderr)
         print("\u63d0\u793a: \u7528 --find \u67e5\u627e\u76ee\u5f55\u4e0b\u7684 git \u4ed3\u5e93", file=sys.stderr)
         sys.exit(1)
+
+    # --export json: compute stats and dump to stdout, no TUI
+    if args.export == "json":
+        import json
+        stats = compute_stats(repo_path)
+        payload = {
+            "repo_name": stats.repo_name,
+            "repo_path": str(stats.repo_path),
+            "current_branch": stats.current_branch,
+            "total_commits": stats.total_commits,
+            "total_authors": stats.total_authors,
+            "total_branches": stats.total_branches,
+            "first_commit_date": str(stats.first_commit_date) if stats.first_commit_date else None,
+            "last_commit_date": str(stats.last_commit_date) if stats.last_commit_date else None,
+            "language_counts": dict(stats.language_counts),
+            "author_counts": dict(stats.author_counts),
+            "daily_counts": {str(k): v for k, v in stats.daily_counts.items()},
+            "hour_counts": dict(stats.hour_counts),
+            "weekday_counts": dict(stats.weekday_counts),
+            "commits": [
+                {
+                    "hash": c.hash,
+                    "author": c.author,
+                    "date": c.date.isoformat(),
+                    "message": c.message,
+                    "files_changed": c.files_changed,
+                    "insertions": c.insertions,
+                    "deletions": c.deletions,
+                }
+                for c in stats.commits
+            ],
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        sys.exit(0)
 
     app = GitStatsApp(repo_path=repo_path)
     app.run()
