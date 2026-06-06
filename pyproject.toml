@@ -28,7 +28,7 @@ git-stats = "src.app:main"
 git-stats-gui = "src.gui_launcher:main_gui"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0,<9.0", "pytest-cov", "ruff>=0.1", "tomli>=1.0; python_version < '3.11'"]
+dev = ["pytest>=8.0,<9.0", "pytest-cov", "ruff>=0.1", "tomli>=1.0"]
 
 [tool.setuptools.packages.find]
 include = ["src*"]
