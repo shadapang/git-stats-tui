@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from textual.widgets import Static
 from rich.table import Table
-from rich.text import Text
-from rich.align import Align
 
 from src.git_reader import GitStats
 

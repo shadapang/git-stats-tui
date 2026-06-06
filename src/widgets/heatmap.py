@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from collections import defaultdict
 
 from textual.widgets import Static
 from rich.text import Text
-from rich.table import Table
 from rich.align import Align
 
 from src.git_reader import GitStats

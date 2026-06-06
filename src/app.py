@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Header, Footer, Static, TabbedContent, TabPane, Input
-from textual.containers import VerticalScroll, Horizontal, Vertical, HorizontalGroup
-from textual.events import Key
+from textual.containers import VerticalScroll, Horizontal, Vertical
 from rich.text import Text
-from rich.table import Table
 from rich.align import Align
 from rich.console import Group
 
@@ -232,27 +230,26 @@ class GitStatsApp(App):
         s = self.stats
         info = Text()
         info.append(f"  {s.repo_name}  ", style="bold magenta")
-        info.append(f"\u5206\u652f ", style="dim")
+        info.append("\u5206\u652f ", style="dim")
         info.append(f"{s.current_branch}", style="cyan")
-        info.append(f"  |  ", style="dim")
+        info.append("  |  ", style="dim")
         info.append(f"{s.total_commits}", style="bold green")
-        info.append(f" \u6b21\u63d0\u4ea4  ", style="dim")
+        info.append(" \u6b21\u63d0\u4ea4  ", style="dim")
         info.append(f"{s.total_authors}", style="bold yellow")
-        info.append(f" \u4f4d\u4f5c\u8005  ", style="dim")
+        info.append(" \u4f4d\u4f5c\u8005  ", style="dim")
         info.append(f"{s.total_branches}", style="bold blue")
-        info.append(f" \u4e2a\u5206\u652f", style="dim")
+        info.append(" \u4e2a\u5206\u652f", style="dim")
         if s.first_commit_date and s.last_commit_date:
             days = (s.last_commit_date - s.first_commit_date).days
-            info.append(f"  |  ", style="dim")
+            info.append("  |  ", style="dim")
             info.append(f"{days}", style="bold")
-            info.append(f" \u5929\u6d3b\u8dc3", style="dim")
+            info.append(" \u5929\u6d3b\u8dc3", style="dim")
         self.query_one("#repo-info", Static).update(info)
 
     def _render_heatmap(self) -> None:
         """Render the contribution heatmap."""
         if not self.stats:
             return
-        from src.widgets.heatmap import build_heatmap_text
         heatmap = build_heatmap_text(self.stats)
         self.query_one("#heatmap-content", Static).update(Align.center(heatmap))
 
@@ -260,7 +257,6 @@ class GitStatsApp(App):
         """Render the language breakdown."""
         if not self.stats:
             return
-        from src.widgets.languages import build_language_table
         table = build_language_table(self.stats)
         self.query_one("#lang-content", Static).update(table)
 
@@ -268,7 +264,6 @@ class GitStatsApp(App):
         """Render the commit timeline."""
         if not self.stats:
             return
-        from src.widgets.timeline import build_hour_chart, build_weekday_chart, build_author_table
         hour = build_hour_chart(self.stats)
         weekday = build_weekday_chart(self.stats)
         authors = build_author_table(self.stats)

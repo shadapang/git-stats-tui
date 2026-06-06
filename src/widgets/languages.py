@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from textual.widgets import Static
-from rich.text import Text
 from rich.table import Table
-from rich.align import Align
-from rich.bar import Bar
 
 from src.git_reader import GitStats
 
@@ -45,13 +42,13 @@ def build_language_table(stats: GitStats, top_n: int = 12) -> Table:
     top_langs = lang_counts.most_common(top_n)
 
     table = Table(
-        title=f"Language Breakdown  ({total} files)",
+        title=f"Language Breakdown  ({total:,} lines)",
         show_header=True,
         border_style="dim",
         title_style="bold magenta",
     )
     table.add_column("Language", style="cyan", min_width=14)
-    table.add_column("Files", justify="right", width=6)
+    table.add_column("Lines", justify="right", width=8)
     table.add_column("Share", justify="right", width=6)
     table.add_column("Bar", min_width=20)
 

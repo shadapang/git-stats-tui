@@ -1,7 +1,6 @@
 """git-stats-tui GUI Launcher - tkinter folder picker + auto dependency install."""
 
 import sys
-import os
 import subprocess
 from pathlib import Path
 
@@ -58,7 +57,7 @@ def check_and_install_deps():
 def launch_gui():
     """Show a tkinter GUI to pick a repo folder and launch git-stats-tui."""
     import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
+    from tkinter import filedialog
 
     # Check deps first
     if not check_and_install_deps():
