@@ -29,7 +29,6 @@ def check_and_install_deps():
         return True
 
     # Try auto-install
-    import tkinter as tk
     from tkinter import messagebox
     root = _get_root()
     root.withdraw()
@@ -43,11 +42,8 @@ def check_and_install_deps():
             )
             return True
         except Exception as e:
-            # Use Toplevel for error dialog instead of creating a new Tk()
-            err_root = tk.Tk()
-            err_root.withdraw()
-            messagebox.showerror("git-stats-tui", f"Install failed:\n{e}\n\nPlease run manually:\npip install {' '.join(missing)}")
-            err_root.destroy()
+            # Print error to stderr instead of creating a second Tk() instance
+            print(f"Install failed: {e}\nPlease run manually:\npip install {' '.join(missing)}", file=sys.stderr)
             return False
     else:
         root.destroy()
@@ -145,16 +141,8 @@ def launch_gui():
             app = GitStatsApp(repo_path=resolved)
             app.run()
         except Exception as e:
-            # If TUI fails, show error — use a fresh Tk since main one was destroyed
-            import tkinter as tk
-            from tkinter import messagebox
-            err_root = tk.Tk()
-            err_root.withdraw()
-            messagebox.showerror(
-                "git-stats-tui",
-                f"\u542f\u52a8\u5931\u8d25:\n{e}\n\n\u8bf7\u5c1d\u8bd5\u547d\u4ee4\u884c\u8fd0\u884c:\ngit-stats \"{resolved}\""
-            )
-            err_root.destroy()
+            # Print error to stderr instead of creating a second Tk() instance
+            print(f'启动失败: {e}\n请尝试命令行运行:\ngit-stats "{resolved}"', file=sys.stderr)
             sys.exit(1)
 
     start_btn = tk.Button(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from textual.widgets import Static
 from rich.table import Table
 
 from src.git_reader import GitStats
@@ -133,26 +132,4 @@ def build_author_table(stats: GitStats, top_n: int = 10) -> Table:
     return table
 
 
-class TimelineWidget(Static):
-    """A Textual widget that renders commit timeline charts."""
 
-    DEFAULT_CSS = """
-    TimelineWidget {
-        height: auto;
-        padding: 1 2;
-        border: solid $primary;
-        border-title-style: bold magenta;
-    }
-    """
-
-    def __init__(self, stats: GitStats, **kwargs):
-        super().__init__(**kwargs)
-        self.stats = stats
-        self.border_title = "  Commit Timeline  "
-
-    def on_mount(self) -> None:
-        from rich.console import Group
-        hour_chart = build_hour_chart(self.stats)
-        weekday_chart = build_weekday_chart(self.stats)
-        author_table = build_author_table(self.stats)
-        self.update(Group(hour_chart, weekday_chart, author_table))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from textual.widgets import Static
 from rich.table import Table
 
 from src.git_reader import GitStats
@@ -80,23 +79,4 @@ def build_language_table(stats: GitStats, top_n: int = 12) -> Table:
     return table
 
 
-class LanguageWidget(Static):
-    """A Textual widget that renders the language breakdown."""
 
-    DEFAULT_CSS = """
-    LanguageWidget {
-        height: auto;
-        padding: 1 2;
-        border: solid $primary;
-        border-title-style: bold magenta;
-    }
-    """
-
-    def __init__(self, stats: GitStats, **kwargs):
-        super().__init__(**kwargs)
-        self.stats = stats
-        self.border_title = "  Language Breakdown  "
-
-    def on_mount(self) -> None:
-        table = build_language_table(self.stats)
-        self.update(table)

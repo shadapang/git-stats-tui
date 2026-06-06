@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from textual.widgets import Static
 from rich.text import Text
-from rich.align import Align
 
 from src.git_reader import GitStats
 
@@ -132,23 +130,4 @@ def _current_streak(daily_counts: dict[date, int]) -> int:
     return streak
 
 
-class HeatmapWidget(Static):
-    """A Textual widget that renders the contribution heatmap."""
 
-    DEFAULT_CSS = """
-    HeatmapWidget {
-        height: auto;
-        padding: 1 2;
-        border: solid $primary;
-        border-title-style: bold magenta;
-    }
-    """
-
-    def __init__(self, stats: GitStats, **kwargs):
-        super().__init__(**kwargs)
-        self.stats = stats
-        self.border_title = f"  Contribution Heatmap - {stats.repo_name}  "
-
-    def on_mount(self) -> None:
-        heatmap = build_heatmap_text(self.stats)
-        self.update(Align.center(heatmap))
