@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "Beautiful terminal UI for local git statistics - contribution heatmap, language breakdown, commit patterns"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Dev Engineer" }]
 keywords = ["git", "statistics", "tui", "terminal", "contribution", "heatmap"]
 classifiers = [
@@ -28,11 +28,11 @@ git-stats = "src.app:main"
 git-stats-gui = "src.gui_launcher:main_gui"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0,<9.0", "pytest-cov", "ruff>=0.1", "tomli>=1.0"]
+dev = ["pytest>=8.0,<9.0", "pytest-cov", "ruff>=0.1"]
 
 [tool.setuptools.packages.find]
 include = ["src*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
