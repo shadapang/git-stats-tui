@@ -28,7 +28,7 @@ class GitStats:
     commits: list[CommitInfo] = field(default_factory=list)
     # contribution heatmap: date -> commit count
     daily_counts: dict[date, int] = field(default_factory=dict)
-    # language breakdown: ext -> line count (approximated by file count * avg)
+    # language breakdown: ext -> line count
     language_counts: Counter = field(default_factory=Counter)
     # commit hour distribution: hour(0-23) -> count
     hour_counts: Counter = field(default_factory=Counter)
@@ -186,10 +186,28 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
     return commits
 
 
-def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
-    """Read language breakdown using git ls-files + wc -l for line counts.
+def _count_lines(filepath: Path) -> int:
+    """Count lines in a file, returning 0 on any error."""
+    try:
+        with open(filepath, "rb") as f:
+            # Fast line count: read in chunks and count newlines
+            count = 0
+            buf = bytearray(65536)
+            while True:
+                n = f.readinto(buf)
+                if n == 0:
+                    break
+                count += buf[:n].count(b"\n")
+            return count
+    except (OSError, PermissionError):
+        return 0
 
-    Falls back to file-count mode if wc -l is unavailable.
+
+def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
+    """Read language breakdown using git ls-files + line counts.
+
+    Uses Python line counting (cross-platform, no xargs/wc dependency).
+    Falls back to file-count mode only for binary/unreadable files.
     """
     output = _run_git(repo_path, "ls-files")
     if not output:
@@ -203,56 +221,25 @@ def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
     if not files:
         return Counter()
 
-    # Try wc -l for accurate line counts
-    lang_counter: Counter = Counter()
-    try:
-        # Build file list, grouped by extension for batch processing
-        file_list = "\n".join(files[:max_files])
-        wc_output = subprocess.run(
-            ["xargs", "-d", "\n", "wc", "-l"],
-            cwd=repo_path,
-            input=file_list,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if wc_output.returncode == 0 and wc_output.stdout.strip():
-            # Parse wc -l output: "  123 path/to/file.py"
-            lang_lines: dict[str, int] = {}
-            for line in wc_output.stdout.strip().split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(None, 1)
-                if len(parts) < 2:
-                    continue
-                try:
-                    count = int(parts[0])
-                except ValueError:
-                    continue
-                filepath = parts[1]
-                ext = Path(filepath).suffix.lower()
-                lang = LANG_MAP.get(ext)
-                if lang:
-                    lang_lines[lang] = lang_lines.get(lang, 0) + count
-                elif ext and not ext.startswith(".") and len(ext) <= 6:
-                    key = f"Other({ext})"
-                    lang_lines[key] = lang_lines.get(key, 0) + count
-            return Counter(lang_lines)
-    except (FileNotFoundError, OSError):
-        pass  # wc not available, fall through to file-count mode
-
-    # Fallback: file-count mode
-    for filepath in files:
+    lang_lines: dict[str, int] = {}
+    for filepath in files[:max_files]:
         ext = Path(filepath).suffix.lower()
         lang = LANG_MAP.get(ext)
-        if lang:
-            lang_counter[lang] += 1
-        elif ext and not ext.startswith(".") and len(ext) <= 6:
-            lang_counter[f"Other({ext})"] += 1
+        if not lang:
+            if ext and not ext.startswith(".") and len(ext) <= 6:
+                lang = f"Other({ext})"
+            else:
+                continue
 
-    return lang_counter
+        full_path = repo_path / filepath
+        line_count = _count_lines(full_path)
+        if line_count > 0:
+            lang_lines[lang] = lang_lines.get(lang, 0) + line_count
+        else:
+            # Fallback: count as 1 file (binary or empty)
+            lang_lines[lang] = lang_lines.get(lang, 0) + 1
+
+    return Counter(lang_lines)
 
 
 def _compute_derived_stats(

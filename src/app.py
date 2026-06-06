@@ -99,12 +99,15 @@ class GitStatsApp(App):
         Binding("s", "toggle_repo_switch", "\u5207\u4ed3\u5e93", show=True),
     ]
 
-    def __init__(self, repo_path: Path | None = None, **kwargs):
+    def __init__(self, repo_path: Path | None = None, since: date | None = None, until: date | None = None, **kwargs):
         super().__init__(**kwargs)
         self.repo_path = repo_path or Path.cwd()
         self.stats: GitStats | None = None
         self._date_filter: tuple[date, date] | None = None
         self._discovered_repos: list[Path] = []
+        # Apply CLI --since/--until as initial date filter
+        self._initial_since = since
+        self._initial_until = until
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -207,9 +210,19 @@ class GitStatsApp(App):
             self.stats = compute_stats(self.repo_path)
         except Exception as e:
             self.query_one("#repo-info", Static).update(
-                f"[red]\u52a0\u8f7d\u4ed3\u5e93\u51fa\u9519: {e}[/]"
+                f"[red]加载仓库出错: {e}[/]"
             )
             return
+
+        # Apply CLI --since/--until as initial date filter (once)
+        if self._initial_since or self._initial_until:
+            if self.stats:
+                start = self._initial_since or self.stats.first_commit_date or date.min
+                end = self._initial_until or self.stats.last_commit_date or date.max
+                self.stats = filter_by_date(self.stats, start, end)
+                self._date_filter = (start, end)
+            self._initial_since = None
+            self._initial_until = None
 
         # Apply date filter if set (pure function — no mutation)
         if self._date_filter and self.stats:
@@ -350,6 +363,18 @@ def main():
         choices=["json"],
         help="\u5bfc\u51fa\u7edf\u8ba1\u6570\u636e\u4e3a JSON \u5e76\u8f93\u51fa\u5230 stdout",
     )
+    parser.add_argument(
+        "--since",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="起始日期筛选 (含)",
+    )
+    parser.add_argument(
+        "--until",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="截止日期筛选 (含)",
+    )
     args = parser.parse_args()
 
     repo_path = Path(args.path).resolve()
@@ -377,6 +402,10 @@ def main():
     if args.export == "json":
         import json
         stats = compute_stats(repo_path)
+        if args.since or args.until:
+            start = args.since or stats.first_commit_date or date.min
+            end = args.until or stats.last_commit_date or date.max
+            stats = filter_by_date(stats, start, end)
         payload = {
             "repo_name": stats.repo_name,
             "repo_path": str(stats.repo_path),
@@ -407,7 +436,7 @@ def main():
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         sys.exit(0)
 
-    app = GitStatsApp(repo_path=repo_path)
+    app = GitStatsApp(repo_path=repo_path, since=args.since, until=args.until)
     app.run()
 
 

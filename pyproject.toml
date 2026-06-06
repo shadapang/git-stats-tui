@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "git-stats-tui"
-version = "0.2.0"
+version = "0.3.0"
 description = "Beautiful terminal UI for local git statistics - contribution heatmap, language breakdown, commit patterns"
 readme = "README.md"
 license = "MIT"

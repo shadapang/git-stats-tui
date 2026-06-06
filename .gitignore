@@ -31,3 +31,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+desktop-tutorial/  
+git-stats-tui/  
+uv.lock  
