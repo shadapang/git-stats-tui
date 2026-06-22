@@ -53,11 +53,12 @@ def build_churn_table(stats: GitStats, top_n: int = 20) -> Table:
         )
 
     # Summary
+    total_churn = sum(stats.file_churn.values())
     table.add_row("", "", "", "", "")
     table.add_row(
         "",
-        f"[dim]Top 5 占总提交的 "
-        f"{sum(c for _, c in top_files[:5]) / total_commits * 100:.1f}%[/]",
+        f"[dim]Top 5 占总修改次数的 "
+        f"{sum(c for _, c in top_files[:5]) / total_churn * 100:.1f}%[/]",
         "", "",
         "",
     )

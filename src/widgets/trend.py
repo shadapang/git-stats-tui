@@ -50,23 +50,25 @@ def _sparkline(values: list[int], width: int = 40) -> Text:
 def build_weekly_trend(stats: GitStats, weeks: int = 26) -> Table:
     """Build a weekly commit trend for the last N weeks."""
     today = date.today()
-    end_date = today - timedelta(days=today.weekday())  # end on Sunday
-    start_date = end_date - timedelta(weeks=weeks - 1)
+    # Find the Sunday of the current week
+    current_week_sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+    # Go back (weeks - 1) weeks to get the start of the oldest week
+    window_start = current_week_sunday - timedelta(weeks=weeks - 1)
 
     # Aggregate commits by week
     weekly: dict[date, int] = defaultdict(int)
     for c in stats.commits:
         d = c.date.date()
-        if start_date <= d <= end_date:
-            # Find the start of the week (Sunday)
-            week_start = d - timedelta(days=(d.weekday() + 1) % 7)
+        # Find the start of the week (Sunday)
+        week_start = d - timedelta(days=(d.weekday() + 1) % 7)
+        if window_start <= week_start <= current_week_sunday:
             weekly[week_start] += 1
 
     # Build ordered list
     labels = []
     values = []
     for i in range(weeks):
-        ws = start_date + timedelta(weeks=i)
+        ws = window_start + timedelta(weeks=i)
         labels.append(ws.strftime("%m-%d"))
         values.append(weekly.get(ws, 0))
 
