@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from textual.widgets import Static
 from rich.table import Table
 
 from src.git_reader import GitStats
@@ -47,28 +46,3 @@ def build_commits_table(stats: GitStats, max_rows: int = 100) -> Table:
         table.add_row("", "", "", f"... \u8fd8\u6709 {stats.total_commits - max_rows} \u6b21\u63d0\u4ea4", "", "")
 
     return table
-
-
-class CommitsWidget(Static):
-    """A Textual widget that renders the recent commits list."""
-
-    DEFAULT_CSS = """
-    CommitsWidget {
-        height: auto;
-        padding: 1 2;
-    }
-    """
-
-    def __init__(self, stats: GitStats, **kwargs):
-        super().__init__(**kwargs)
-        self.stats = stats
-
-    def on_mount(self) -> None:
-        table = build_commits_table(self.stats)
-        self.update(table)
-
-    def update_stats(self, stats: GitStats) -> None:
-        """Update with new stats."""
-        self.stats = stats
-        table = build_commits_table(stats)
-        self.update(table)

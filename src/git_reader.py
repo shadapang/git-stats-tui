@@ -286,7 +286,7 @@ def filter_by_date(stats: GitStats, start: date, end: date) -> GitStats:
         repo_name=stats.repo_name,
         commits=filtered_commits,
         total_commits=len(filtered_commits),
-        language_counts=stats.language_counts,  # not date-dependent
+        language_counts=Counter(stats.language_counts),  # copy to avoid shared mutation
         current_branch=stats.current_branch,
         total_branches=stats.total_branches,
     )
