@@ -23,6 +23,7 @@ from src.widgets.overview import build_overview_table
 from src.widgets.commits import build_commits_table
 from src.widgets.churn import build_churn_table
 from src.widgets.trend import build_weekly_trend, build_monthly_trend
+from src.widgets.comparison import build_comparison_table, build_language_comparison
 
 
 class GitStatsApp(App):
@@ -102,12 +103,21 @@ class GitStatsApp(App):
         Binding("s", "toggle_repo_switch", "切仓库", show=True),
     ]
 
-    def __init__(self, repo_path: Path | None = None, since: date | None = None, until: date | None = None, **kwargs):
+    def __init__(
+        self,
+        repo_path: Path | None = None,
+        since: date | None = None,
+        until: date | None = None,
+        compare_path: Path | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.repo_path = repo_path or Path.cwd()
         self.stats: GitStats | None = None
+        self.stats_b: GitStats | None = None
         self._date_filter: tuple[date, date] | None = None
         self._discovered_repos: list[Path] = []
+        self._compare_path = compare_path
         # Apply CLI --since/--until as initial date filter
         self._initial_since = since
         self._initial_until = until
@@ -146,6 +156,12 @@ class GitStatsApp(App):
                 with TabPane("提交趋势", id="tab-trend"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="trend-content")
+                with TabPane("仓库对比", id="tab-compare"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="compare-content")
+                with TabPane("语言对比", id="tab-lang-compare"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="lang-compare-content")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -222,6 +238,13 @@ class GitStatsApp(App):
             )
             return
 
+        # Load comparison repo if specified
+        if self._compare_path and self._compare_path.exists():
+            try:
+                self.stats_b = compute_stats(self._compare_path)
+            except Exception:
+                self.stats_b = None
+
         # Apply CLI --since/--until as initial date filter (once)
         if self._initial_since or self._initial_until:
             if self.stats:
@@ -245,6 +268,7 @@ class GitStatsApp(App):
         self._render_overview()
         self._render_churn()
         self._render_trend()
+        self._render_comparison()
 
     def _render_repo_info(self) -> None:
         """Render the repo info header."""
@@ -320,6 +344,19 @@ class GitStatsApp(App):
         weekly = build_weekly_trend(self.stats)
         monthly = build_monthly_trend(self.stats)
         self.query_one("#trend-content", Static).update(Group(weekly, monthly))
+
+    def _render_comparison(self) -> None:
+        """Render the repo comparison tab."""
+        if not self.stats or not self.stats_b:
+            if not self.stats_b and self._compare_path:
+                self.query_one("#compare-content", Static).update(
+                    f"[red]无法加载对比仓库: {self._compare_path}[/]"
+                )
+            return
+        table = build_comparison_table(self.stats, self.stats_b)
+        self.query_one("#compare-content", Static).update(table)
+        lang_table = build_language_comparison(self.stats, self.stats_b)
+        self.query_one("#lang-compare-content", Static).update(lang_table)
 
     def action_refresh(self) -> None:
         """Refresh stats."""
@@ -400,6 +437,11 @@ def main():
         metavar="YYYY-MM-DD",
         help="截止日期筛选 (含)",
     )
+    parser.add_argument(
+        "--compare",
+        metavar="REPO_PATH",
+        help="对比另一个仓库的统计数据",
+    )
     args = parser.parse_args()
 
     repo_path = Path(args.path).resolve()
@@ -455,14 +497,40 @@ def main():
                     "files_changed": c.files_changed,
                     "insertions": c.insertions,
                     "deletions": c.deletions,
+                    "changed_files": c.changed_files,
                 }
                 for c in stats.commits
             ],
         }
+        # Add comparison data if --compare specified
+        if args.compare:
+            compare_path_obj = Path(args.compare).resolve()
+            if (compare_path_obj / ".git").exists():
+                stats_b = compute_stats(compare_path_obj)
+                if args.since or args.until:
+                    start = args.since or stats_b.first_commit_date or date.min
+                    end = args.until or stats_b.last_commit_date or date.max
+                    stats_b = filter_by_date(stats_b, start, end)
+                payload["compare"] = {
+                    "repo_name": stats_b.repo_name,
+                    "repo_path": str(stats_b.repo_path),
+                    "total_commits": stats_b.total_commits,
+                    "total_authors": stats_b.total_authors,
+                    "total_branches": stats_b.total_branches,
+                    "language_counts": dict(stats_b.language_counts),
+                    "author_counts": dict(stats_b.author_counts),
+                    "file_churn": dict(stats_b.file_churn.most_common(50)),
+                }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         sys.exit(0)
 
-    app = GitStatsApp(repo_path=repo_path, since=args.since, until=args.until)
+    compare_path = Path(args.compare).resolve() if args.compare else None
+    app = GitStatsApp(
+        repo_path=repo_path,
+        since=args.since,
+        until=args.until,
+        compare_path=compare_path,
+    )
     app.run()
 
 
