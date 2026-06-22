@@ -203,11 +203,14 @@ def _count_lines(filepath: Path) -> int:
         return 0
 
 
-def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
+def read_language_breakdown(
+    repo_path: Path, max_files: int = 2000, line_count_threshold: int = 500
+) -> Counter:
     """Read language breakdown using git ls-files + line counts.
 
     Uses Python line counting (cross-platform, no xargs/wc dependency).
-    Falls back to file-count mode only for binary/unreadable files.
+    When file count exceeds ``line_count_threshold``, falls back to fast
+    file-count mode (skips per-file line reading for speed).
     """
     output = _run_git(repo_path, "ls-files")
     if not output:
@@ -221,6 +224,21 @@ def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
     if not files:
         return Counter()
 
+    # Fast path: if too many files, just count files per language
+    if len(files) > line_count_threshold:
+        lang_counts: dict[str, int] = {}
+        for filepath in files[:max_files]:
+            ext = Path(filepath).suffix.lower()
+            lang = LANG_MAP.get(ext)
+            if not lang:
+                if ext and not ext.startswith(".") and len(ext) <= 6:
+                    lang = f"Other({ext})"
+                else:
+                    continue
+            lang_counts[lang] = lang_counts.get(lang, 0) + 1
+        return Counter(lang_counts)
+
+    # Slow path: count lines per file
     lang_lines: dict[str, int] = {}
     for filepath in files[:max_files]:
         ext = Path(filepath).suffix.lower()
