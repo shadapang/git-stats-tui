@@ -25,7 +25,6 @@ dependencies = [
 
 [project.scripts]
 git-stats = "src.app:main"
-git-stats-gui = "src.gui_launcher:main_gui"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0,<9.0", "pytest-cov", "ruff>=0.1"]

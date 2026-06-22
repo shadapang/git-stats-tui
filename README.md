@@ -2,7 +2,7 @@
 
 > Beautiful terminal UI for local git statistics — contribution heatmap, language breakdown, commit patterns
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![TUI](https://img.shields.io/badge/TUI-Textual-orange)
 
@@ -120,7 +120,7 @@ MIT
 
 ### 前提条件
 
-- Python 3.10 或以上
+- Python 3.11 或以上
 - 你的项目已经用 git 管理（有 `.git` 目录）
 
 ### 安装和运行
