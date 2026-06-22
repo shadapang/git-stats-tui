@@ -19,6 +19,7 @@ class CommitInfo:
     files_changed: int = 0
     insertions: int = 0
     deletions: int = 0
+    changed_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,6 +45,8 @@ class GitStats:
     # branch info
     current_branch: str = ""
     total_branches: int = 0
+    # file churn: filepath -> number of commits that touched it
+    file_churn: Counter = field(default_factory=Counter)
 
 
 # Language mapping from file extensions
@@ -151,6 +154,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
         files_changed = 0
         insertions = 0
         deletions = 0
+        changed_files: list[str] = []
         i += 1
         # Skip blank line between header and numstat (git adds one)
         if i < len(lines) and not lines[i].strip():
@@ -160,6 +164,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
             if len(stat_parts) >= 3:
                 ins = stat_parts[0]
                 dels = stat_parts[1]
+                filepath = stat_parts[2]
                 if ins != "-":
                     try:
                         insertions += int(ins)
@@ -171,6 +176,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
                     except ValueError:
                         pass
                 files_changed += 1
+                changed_files.append(filepath)
             i += 1
 
         commits.append(CommitInfo(
@@ -181,6 +187,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
             files_changed=files_changed,
             insertions=insertions,
             deletions=deletions,
+            changed_files=changed_files,
         ))
 
     return commits
@@ -203,11 +210,14 @@ def _count_lines(filepath: Path) -> int:
         return 0
 
 
-def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
+def read_language_breakdown(
+    repo_path: Path, max_files: int = 2000, line_count_threshold: int = 500
+) -> Counter:
     """Read language breakdown using git ls-files + line counts.
 
     Uses Python line counting (cross-platform, no xargs/wc dependency).
-    Falls back to file-count mode only for binary/unreadable files.
+    When file count exceeds ``line_count_threshold``, falls back to fast
+    file-count mode (skips per-file line reading for speed).
     """
     output = _run_git(repo_path, "ls-files")
     if not output:
@@ -221,6 +231,21 @@ def read_language_breakdown(repo_path: Path, max_files: int = 2000) -> Counter:
     if not files:
         return Counter()
 
+    # Fast path: if too many files, just count files per language
+    if len(files) > line_count_threshold:
+        lang_counts: dict[str, int] = {}
+        for filepath in files[:max_files]:
+            ext = Path(filepath).suffix.lower()
+            lang = LANG_MAP.get(ext)
+            if not lang:
+                if ext and not ext.startswith(".") and len(ext) <= 6:
+                    lang = f"Other({ext})"
+                else:
+                    continue
+            lang_counts[lang] = lang_counts.get(lang, 0) + 1
+        return Counter(lang_counts)
+
+    # Slow path: count lines per file
     lang_lines: dict[str, int] = {}
     for filepath in files[:max_files]:
         ext = Path(filepath).suffix.lower()
@@ -262,6 +287,8 @@ def _compute_derived_stats(
         stats.hour_counts[c.date.hour] += 1
         stats.weekday_counts[c.date.weekday()] += 1
         stats.author_counts[c.author] += 1
+        for f in c.changed_files:
+            stats.file_churn[f] += 1
     stats.total_authors = len(stats.author_counts)
 
     # Date range (git log newest-first → last element is oldest)
@@ -286,7 +313,7 @@ def filter_by_date(stats: GitStats, start: date, end: date) -> GitStats:
         repo_name=stats.repo_name,
         commits=filtered_commits,
         total_commits=len(filtered_commits),
-        language_counts=stats.language_counts,  # not date-dependent
+        language_counts=Counter(stats.language_counts),  # copy to avoid shared mutation
         current_branch=stats.current_branch,
         total_branches=stats.total_branches,
     )

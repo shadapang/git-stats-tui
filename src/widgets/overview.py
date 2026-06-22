@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from textual.widgets import Static
 from rich.table import Table
 
 from src.git_reader import GitStats
@@ -59,28 +58,3 @@ def build_overview_table(stats: GitStats) -> Table:
             table.add_row("\u5468\u672b/\u5de5\u4f5c\u65e5\u6bd4", f"{ratio:.2f}")
 
     return table
-
-
-class OverviewWidget(Static):
-    """A Textual widget that renders the overview summary."""
-
-    DEFAULT_CSS = """
-    OverviewWidget {
-        height: auto;
-        padding: 1 2;
-    }
-    """
-
-    def __init__(self, stats: GitStats, **kwargs):
-        super().__init__(**kwargs)
-        self.stats = stats
-
-    def on_mount(self) -> None:
-        table = build_overview_table(self.stats)
-        self.update(table)
-
-    def update_stats(self, stats: GitStats) -> None:
-        """Update with new stats."""
-        self.stats = stats
-        table = build_overview_table(stats)
-        self.update(table)

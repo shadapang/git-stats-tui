@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from datetime import date
@@ -20,13 +21,16 @@ from src.widgets.languages import build_language_table
 from src.widgets.timeline import build_hour_chart, build_weekday_chart, build_author_table
 from src.widgets.overview import build_overview_table
 from src.widgets.commits import build_commits_table
+from src.widgets.churn import build_churn_table
+from src.widgets.trend import build_weekly_trend, build_monthly_trend
+from src.widgets.comparison import build_comparison_table, build_language_comparison
 
 
 class GitStatsApp(App):
     """A beautiful TUI for local git statistics."""
 
     TITLE = "git-stats-tui"
-    SUB_TITLE = "Git \u7edf\u8ba1\u4eea\u8868\u76d8"
+    SUB_TITLE = "Git 统计仪表盘"
 
     CSS = """
     Screen {
@@ -92,19 +96,28 @@ class GitStatsApp(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", "\u9000\u51fa", show=True),
-        Binding("r", "refresh", "\u5237\u65b0", show=True),
-        Binding("f", "find_repos", "\u627e\u4ed3\u5e93", show=True),
-        Binding("d", "toggle_date_filter", "\u65e5\u671f\u7b5b\u9009", show=True),
-        Binding("s", "toggle_repo_switch", "\u5207\u4ed3\u5e93", show=True),
+        Binding("q", "quit", "退出", show=True),
+        Binding("r", "refresh", "刷新", show=True),
+        Binding("f", "find_repos", "找仓库", show=True),
+        Binding("d", "toggle_date_filter", "日期筛选", show=True),
+        Binding("s", "toggle_repo_switch", "切仓库", show=True),
     ]
 
-    def __init__(self, repo_path: Path | None = None, since: date | None = None, until: date | None = None, **kwargs):
+    def __init__(
+        self,
+        repo_path: Path | None = None,
+        since: date | None = None,
+        until: date | None = None,
+        compare_path: Path | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.repo_path = repo_path or Path.cwd()
         self.stats: GitStats | None = None
+        self.stats_b: GitStats | None = None
         self._date_filter: tuple[date, date] | None = None
         self._discovered_repos: list[Path] = []
+        self._compare_path = compare_path
         # Apply CLI --since/--until as initial date filter
         self._initial_since = since
         self._initial_until = until
@@ -114,29 +127,41 @@ class GitStatsApp(App):
         with Vertical(id="main-content"):
             # Date filter bar (hidden by default)
             with Horizontal(id="date-filter-bar"):
-                yield Static("\u65e5\u671f\u8303\u56f4 (YYYY-MM-DD ~ YYYY-MM-DD): ", classes="filter-label")
-                yield Input(placeholder="\u5982 2025-01-01 ~ 2025-12-31", id="date-input")
+                yield Static("日期范围 (YYYY-MM-DD ~ YYYY-MM-DD): ", classes="filter-label")
+                yield Input(placeholder="如 2025-01-01 ~ 2025-12-31", id="date-input")
             # Repo switch bar (hidden by default)
             with Horizontal(id="repo-switch-bar"):
-                yield Static("\u4ed3\u5e93\u8def\u5f84: ", classes="filter-label")
-                yield Input(placeholder="\u8def\u5f84/\u5230/\u4ed3\u5e93 \u6216 #N \u9009\u5df2\u53d1\u73b0\u4ed3\u5e93", id="repo-input")
+                yield Static("仓库路径: ", classes="filter-label")
+                yield Input(placeholder="路径/到/仓库 或 #N 选已发现仓库", id="repo-input")
             yield Static(id="repo-info")
             with TabbedContent():
-                with TabPane("\u70ed\u529b\u56fe", id="tab-heatmap"):
+                with TabPane("热力图", id="tab-heatmap"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="heatmap-content")
-                with TabPane("\u8bed\u8a00\u5206\u5e03", id="tab-languages"):
+                with TabPane("语言分布", id="tab-languages"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="lang-content")
-                with TabPane("\u65f6\u95f4\u7ebf", id="tab-timeline"):
+                with TabPane("时间线", id="tab-timeline"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="timeline-content")
-                with TabPane("\u63d0\u4ea4\u8bb0\u5f55", id="tab-commits"):
+                with TabPane("提交记录", id="tab-commits"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="commits-content")
-                with TabPane("\u6982\u89c8", id="tab-overview"):
+                with TabPane("概览", id="tab-overview"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="overview-content")
+                with TabPane("文件热度", id="tab-churn"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="churn-content")
+                with TabPane("提交趋势", id="tab-trend"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="trend-content")
+                with TabPane("仓库对比", id="tab-compare"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="compare-content")
+                with TabPane("语言对比", id="tab-lang-compare"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="lang-compare-content")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -157,23 +182,22 @@ class GitStatsApp(App):
         if not value:
             self._date_filter = None
             self._load_stats()
-            self.notify("\u65e5\u671f\u7b5b\u9009\u5df2\u6e05\u9664")
+            self.notify("日期筛选已清除")
             return
 
         try:
             # Parse "YYYY-MM-DD ~ YYYY-MM-DD" or "YYYY-MM-DD - YYYY-MM-DD"
-            parts = value.replace("~", "-").split("-")
-            parts = [p.strip() for p in parts if p.strip()]
+            parts = re.split(r"\s*[~-]\s*", value)
             if len(parts) == 2:
                 start = date.fromisoformat(parts[0])
                 end = date.fromisoformat(parts[1])
                 self._date_filter = (start, end)
                 self._load_stats()
-                self.notify(f"\u5df2\u7b5b\u9009: {start} ~ {end}")
+                self.notify(f"已筛选: {start} ~ {end}")
             else:
-                self.notify("\u683c\u5f0f: YYYY-MM-DD ~ YYYY-MM-DD", severity="error")
+                self.notify("格式: YYYY-MM-DD ~ YYYY-MM-DD", severity="error")
         except (ValueError, IndexError):
-            self.notify("\u65e5\u671f\u683c\u5f0f\u65e0\u6548", severity="error")
+            self.notify("日期格式无效", severity="error")
 
     def _apply_repo_switch(self, value: str) -> None:
         """Switch to a different repo."""
@@ -188,10 +212,10 @@ class GitStatsApp(App):
                 self.repo_path = self._discovered_repos[idx]
                 self._date_filter = None
                 self._load_stats()
-                self.notify(f"\u5df2\u5207\u6362\u5230: {self.repo_path.name}")
+                self.notify(f"已切换到: {self.repo_path.name}")
                 return
             else:
-                self.notify(f"\u65e0\u6548\u4ed3\u5e93\u5e8f\u53f7 (1-{len(self._discovered_repos)})", severity="error")
+                self.notify(f"无效仓库序号 (1-{len(self._discovered_repos)})", severity="error")
                 return
 
         # Try as a path
@@ -200,9 +224,9 @@ class GitStatsApp(App):
             self.repo_path = new_path
             self._date_filter = None
             self._load_stats()
-            self.notify(f"\u5df2\u5207\u6362\u5230: {self.repo_path.name}")
+            self.notify(f"已切换到: {self.repo_path.name}")
         else:
-            self.notify(f"\u4e0d\u662f git \u4ed3\u5e93: {new_path}", severity="error")
+            self.notify(f"不是 git 仓库: {new_path}", severity="error")
 
     def _load_stats(self) -> None:
         """Load git stats and render all widgets."""
@@ -213,6 +237,13 @@ class GitStatsApp(App):
                 f"[red]加载仓库出错: {e}[/]"
             )
             return
+
+        # Load comparison repo if specified
+        if self._compare_path and self._compare_path.exists():
+            try:
+                self.stats_b = compute_stats(self._compare_path)
+            except Exception:
+                self.stats_b = None
 
         # Apply CLI --since/--until as initial date filter (once)
         if self._initial_since or self._initial_until:
@@ -235,6 +266,9 @@ class GitStatsApp(App):
         self._render_timeline()
         self._render_commits()
         self._render_overview()
+        self._render_churn()
+        self._render_trend()
+        self._render_comparison()
 
     def _render_repo_info(self) -> None:
         """Render the repo info header."""
@@ -243,20 +277,20 @@ class GitStatsApp(App):
         s = self.stats
         info = Text()
         info.append(f"  {s.repo_name}  ", style="bold magenta")
-        info.append("\u5206\u652f ", style="dim")
+        info.append("分支 ", style="dim")
         info.append(f"{s.current_branch}", style="cyan")
         info.append("  |  ", style="dim")
         info.append(f"{s.total_commits}", style="bold green")
-        info.append(" \u6b21\u63d0\u4ea4  ", style="dim")
+        info.append(" 次提交  ", style="dim")
         info.append(f"{s.total_authors}", style="bold yellow")
-        info.append(" \u4f4d\u4f5c\u8005  ", style="dim")
+        info.append(" 位作者  ", style="dim")
         info.append(f"{s.total_branches}", style="bold blue")
-        info.append(" \u4e2a\u5206\u652f", style="dim")
+        info.append(" 个分支", style="dim")
         if s.first_commit_date and s.last_commit_date:
             days = (s.last_commit_date - s.first_commit_date).days
             info.append("  |  ", style="dim")
             info.append(f"{days}", style="bold")
-            info.append(" \u5929\u6d3b\u8dc3", style="dim")
+            info.append(" 天活跃", style="dim")
         self.query_one("#repo-info", Static).update(info)
 
     def _render_heatmap(self) -> None:
@@ -296,24 +330,52 @@ class GitStatsApp(App):
         table = build_commits_table(self.stats)
         self.query_one("#commits-content", Static).update(table)
 
+    def _render_churn(self) -> None:
+        """Render the file churn (hot files) tab."""
+        if not self.stats:
+            return
+        table = build_churn_table(self.stats)
+        self.query_one("#churn-content", Static).update(table)
+
+    def _render_trend(self) -> None:
+        """Render the commit trend (weekly/monthly) tab."""
+        if not self.stats:
+            return
+        weekly = build_weekly_trend(self.stats)
+        monthly = build_monthly_trend(self.stats)
+        self.query_one("#trend-content", Static).update(Group(weekly, monthly))
+
+    def _render_comparison(self) -> None:
+        """Render the repo comparison tab."""
+        if not self.stats or not self.stats_b:
+            if not self.stats_b and self._compare_path:
+                self.query_one("#compare-content", Static).update(
+                    f"[red]无法加载对比仓库: {self._compare_path}[/]"
+                )
+            return
+        table = build_comparison_table(self.stats, self.stats_b)
+        self.query_one("#compare-content", Static).update(table)
+        lang_table = build_language_comparison(self.stats, self.stats_b)
+        self.query_one("#lang-compare-content", Static).update(lang_table)
+
     def action_refresh(self) -> None:
         """Refresh stats."""
         self._load_stats()
-        self.notify("\u5df2\u5237\u65b0!")
+        self.notify("已刷新!")
 
     def action_find_repos(self) -> None:
         """Find git repos under current directory."""
         repos = find_git_repos(self.repo_path.parent)
         if not repos:
-            self.notify("\u672a\u627e\u5230 git \u4ed3\u5e93", severity="warning")
+            self.notify("未找到 git 仓库", severity="warning")
             return
         self._discovered_repos = repos
         # Show repo list as notification
-        lines = [f"\u627e\u5230 {len(repos)} \u4e2a\u4ed3\u5e93\u3002\u6309 [bold]s[/] \u7136\u540e [bold]#N[/] \u5207\u6362:"]
+        lines = [f"找到 {len(repos)} 个仓库。按 [bold]s[/] 然后 [bold]#N[/] 切换:"]
         for i, r in enumerate(repos[:10], 1):
             lines.append(f"  #{i} {r.name}")
         if len(repos) > 10:
-            lines.append(f"  ... \u8fd8\u6709 {len(repos) - 10} \u4e2a")
+            lines.append(f"  ... 还有 {len(repos) - 10} 个")
         self.notify("\n".join(lines))
 
     def action_toggle_date_filter(self) -> None:
@@ -333,7 +395,7 @@ class GitStatsApp(App):
                 self._discovered_repos = find_git_repos(self.repo_path.parent, max_depth=2)
             self.query_one("#repo-input", Input).focus()
             if self._discovered_repos:
-                hint = "\u5df2\u53d1\u73b0: " + ", ".join(
+                hint = "已发现: " + ", ".join(
                     f"#{i+1}={r.name}" for i, r in enumerate(self._discovered_repos[:5])
                 )
                 self.notify(hint)
@@ -345,23 +407,23 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog="git-stats",
-        description="Git \u7edf\u8ba1\u53ef\u89c6\u5316\u5de5\u5177 - \u7ec8\u7aef\u754c\u9762",
+        description="Git 统计可视化工具 - 终端界面",
     )
     parser.add_argument(
         "path",
         nargs="?",
         default=".",
-        help="\u4ed3\u5e93\u8def\u5f84 (\u9ed8\u8ba4: \u5f53\u524d\u76ee\u5f55)",
+        help="仓库路径 (默认: 当前目录)",
     )
     parser.add_argument(
         "--find",
         action="store_true",
-        help="\u67e5\u627e\u76ee\u5f55\u4e0b\u6240\u6709 git \u4ed3\u5e93",
+        help="查找目录下所有 git 仓库",
     )
     parser.add_argument(
         "--export",
         choices=["json"],
-        help="\u5bfc\u51fa\u7edf\u8ba1\u6570\u636e\u4e3a JSON \u5e76\u8f93\u51fa\u5230 stdout",
+        help="导出统计数据为 JSON 并输出到 stdout",
     )
     parser.add_argument(
         "--since",
@@ -375,27 +437,32 @@ def main():
         metavar="YYYY-MM-DD",
         help="截止日期筛选 (含)",
     )
+    parser.add_argument(
+        "--compare",
+        metavar="REPO_PATH",
+        help="对比另一个仓库的统计数据",
+    )
     args = parser.parse_args()
 
     repo_path = Path(args.path).resolve()
 
     if not repo_path.exists():
-        print(f"\u9519\u8bef: \u8def\u5f84\u4e0d\u5b58\u5728: {repo_path}", file=sys.stderr)
+        print(f"错误: 路径不存在: {repo_path}", file=sys.stderr)
         sys.exit(1)
 
     if args.find:
         repos = find_git_repos(repo_path)
         if not repos:
-            print(f"\u672a\u627e\u5230 git \u4ed3\u5e93: {repo_path}")
+            print(f"未找到 git 仓库: {repo_path}")
             sys.exit(0)
-        print(f"\u627e\u5230 {len(repos)} \u4e2a git \u4ed3\u5e93:")
+        print(f"找到 {len(repos)} 个 git 仓库:")
         for r in repos:
             print(f"  {r}")
         sys.exit(0)
 
     if not (repo_path / ".git").exists():
-        print(f"\u9519\u8bef: \u4e0d\u662f git \u4ed3\u5e93: {repo_path}", file=sys.stderr)
-        print("\u63d0\u793a: \u7528 --find \u67e5\u627e\u76ee\u5f55\u4e0b\u7684 git \u4ed3\u5e93", file=sys.stderr)
+        print(f"错误: 不是 git 仓库: {repo_path}", file=sys.stderr)
+        print("提示: 用 --find 查找目录下的 git 仓库", file=sys.stderr)
         sys.exit(1)
 
     # --export json: compute stats and dump to stdout, no TUI
@@ -420,6 +487,7 @@ def main():
             "daily_counts": {str(k): v for k, v in stats.daily_counts.items()},
             "hour_counts": dict(stats.hour_counts),
             "weekday_counts": dict(stats.weekday_counts),
+            "file_churn": dict(stats.file_churn.most_common(50)),
             "commits": [
                 {
                     "hash": c.hash,
@@ -429,14 +497,40 @@ def main():
                     "files_changed": c.files_changed,
                     "insertions": c.insertions,
                     "deletions": c.deletions,
+                    "changed_files": c.changed_files,
                 }
                 for c in stats.commits
             ],
         }
+        # Add comparison data if --compare specified
+        if args.compare:
+            compare_path_obj = Path(args.compare).resolve()
+            if (compare_path_obj / ".git").exists():
+                stats_b = compute_stats(compare_path_obj)
+                if args.since or args.until:
+                    start = args.since or stats_b.first_commit_date or date.min
+                    end = args.until or stats_b.last_commit_date or date.max
+                    stats_b = filter_by_date(stats_b, start, end)
+                payload["compare"] = {
+                    "repo_name": stats_b.repo_name,
+                    "repo_path": str(stats_b.repo_path),
+                    "total_commits": stats_b.total_commits,
+                    "total_authors": stats_b.total_authors,
+                    "total_branches": stats_b.total_branches,
+                    "language_counts": dict(stats_b.language_counts),
+                    "author_counts": dict(stats_b.author_counts),
+                    "file_churn": dict(stats_b.file_churn.most_common(50)),
+                }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         sys.exit(0)
 
-    app = GitStatsApp(repo_path=repo_path, since=args.since, until=args.until)
+    compare_path = Path(args.compare).resolve() if args.compare else None
+    app = GitStatsApp(
+        repo_path=repo_path,
+        since=args.since,
+        until=args.until,
+        compare_path=compare_path,
+    )
     app.run()
 
 
