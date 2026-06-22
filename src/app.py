@@ -21,6 +21,7 @@ from src.widgets.languages import build_language_table
 from src.widgets.timeline import build_hour_chart, build_weekday_chart, build_author_table
 from src.widgets.overview import build_overview_table
 from src.widgets.commits import build_commits_table
+from src.widgets.churn import build_churn_table
 
 
 class GitStatsApp(App):
@@ -138,6 +139,9 @@ class GitStatsApp(App):
                 with TabPane("概览", id="tab-overview"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="overview-content")
+                with TabPane("文件热度", id="tab-churn"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="churn-content")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -235,6 +239,7 @@ class GitStatsApp(App):
         self._render_timeline()
         self._render_commits()
         self._render_overview()
+        self._render_churn()
 
     def _render_repo_info(self) -> None:
         """Render the repo info header."""
@@ -295,6 +300,13 @@ class GitStatsApp(App):
             return
         table = build_commits_table(self.stats)
         self.query_one("#commits-content", Static).update(table)
+
+    def _render_churn(self) -> None:
+        """Render the file churn (hot files) tab."""
+        if not self.stats:
+            return
+        table = build_churn_table(self.stats)
+        self.query_one("#churn-content", Static).update(table)
 
     def action_refresh(self) -> None:
         """Refresh stats."""
@@ -420,6 +432,7 @@ def main():
             "daily_counts": {str(k): v for k, v in stats.daily_counts.items()},
             "hour_counts": dict(stats.hour_counts),
             "weekday_counts": dict(stats.weekday_counts),
+            "file_churn": dict(stats.file_churn.most_common(50)),
             "commits": [
                 {
                     "hash": c.hash,

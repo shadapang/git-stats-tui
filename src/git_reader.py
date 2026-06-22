@@ -19,6 +19,7 @@ class CommitInfo:
     files_changed: int = 0
     insertions: int = 0
     deletions: int = 0
+    changed_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -44,6 +45,8 @@ class GitStats:
     # branch info
     current_branch: str = ""
     total_branches: int = 0
+    # file churn: filepath -> number of commits that touched it
+    file_churn: Counter = field(default_factory=Counter)
 
 
 # Language mapping from file extensions
@@ -151,6 +154,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
         files_changed = 0
         insertions = 0
         deletions = 0
+        changed_files: list[str] = []
         i += 1
         # Skip blank line between header and numstat (git adds one)
         if i < len(lines) and not lines[i].strip():
@@ -160,6 +164,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
             if len(stat_parts) >= 3:
                 ins = stat_parts[0]
                 dels = stat_parts[1]
+                filepath = stat_parts[2]
                 if ins != "-":
                     try:
                         insertions += int(ins)
@@ -171,6 +176,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
                     except ValueError:
                         pass
                 files_changed += 1
+                changed_files.append(filepath)
             i += 1
 
         commits.append(CommitInfo(
@@ -181,6 +187,7 @@ def read_commits(repo_path: Path, max_commits: int = 5000) -> list[CommitInfo]:
             files_changed=files_changed,
             insertions=insertions,
             deletions=deletions,
+            changed_files=changed_files,
         ))
 
     return commits
@@ -280,6 +287,8 @@ def _compute_derived_stats(
         stats.hour_counts[c.date.hour] += 1
         stats.weekday_counts[c.date.weekday()] += 1
         stats.author_counts[c.author] += 1
+        for f in c.changed_files:
+            stats.file_churn[f] += 1
     stats.total_authors = len(stats.author_counts)
 
     # Date range (git log newest-first → last element is oldest)
