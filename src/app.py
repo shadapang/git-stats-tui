@@ -22,6 +22,7 @@ from src.widgets.timeline import build_hour_chart, build_weekday_chart, build_au
 from src.widgets.overview import build_overview_table
 from src.widgets.commits import build_commits_table
 from src.widgets.churn import build_churn_table
+from src.widgets.trend import build_weekly_trend, build_monthly_trend
 
 
 class GitStatsApp(App):
@@ -142,6 +143,9 @@ class GitStatsApp(App):
                 with TabPane("文件热度", id="tab-churn"):
                     with VerticalScroll(classes="tab-content"):
                         yield Static(id="churn-content")
+                with TabPane("提交趋势", id="tab-trend"):
+                    with VerticalScroll(classes="tab-content"):
+                        yield Static(id="trend-content")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -240,6 +244,7 @@ class GitStatsApp(App):
         self._render_commits()
         self._render_overview()
         self._render_churn()
+        self._render_trend()
 
     def _render_repo_info(self) -> None:
         """Render the repo info header."""
@@ -307,6 +312,14 @@ class GitStatsApp(App):
             return
         table = build_churn_table(self.stats)
         self.query_one("#churn-content", Static).update(table)
+
+    def _render_trend(self) -> None:
+        """Render the commit trend (weekly/monthly) tab."""
+        if not self.stats:
+            return
+        weekly = build_weekly_trend(self.stats)
+        monthly = build_monthly_trend(self.stats)
+        self.query_one("#trend-content", Static).update(Group(weekly, monthly))
 
     def action_refresh(self) -> None:
         """Refresh stats."""
